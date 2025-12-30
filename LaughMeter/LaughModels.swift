@@ -25,7 +25,30 @@ class LaughEntry {
     }
 }
 
-// MARK: - 2. SOUND MANAGER
+// MARK: - 2. QUOTE MANAGER (New)
+struct QuoteManager {
+    static let quotes = [
+        "Laughter is the shock absorber that eases the blows of life.",
+        "A day without laughter is a day wasted. – Charlie Chaplin",
+        "Laughter is an instant vacation. – Milton Berle",
+        "Against the assault of laughter, nothing can stand. – Mark Twain",
+        "If you’re too busy to laugh, you are too busy.",
+        "Smile, it confuses people.",
+        "Laughter is the closest distance between two people.",
+        "There is nothing in the world so irresistibly contagious as laughter.",
+        "Optimist: someone who figures that taking a step backward after taking a step forward is not a disaster, it's more like a cha-cha.",
+        "Laugh at your problems, everyone else does."
+    ]
+    
+    static func getDailyQuote() -> String {
+        // Pick a quote based on the day of the year so it stays same for the whole day
+        let dayOfYear = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
+        let index = dayOfYear % quotes.count
+        return quotes[index]
+    }
+}
+
+// MARK: - 3. SOUND MANAGER
 class SoundManager {
     static let shared = SoundManager()
     var audioPlayer: AVAudioPlayer?
@@ -47,7 +70,7 @@ class SoundManager {
     }
 }
 
-// MARK: - 3. THE CONTROLLER (Logic)
+// MARK: - 4. THE CONTROLLER (Logic)
 @MainActor
 class LaughController: ObservableObject {
     var modelContext: ModelContext
@@ -65,11 +88,19 @@ class LaughController: ObservableObject {
     // --- Calendar Helper ---
     @Published var laughsByDate: [Date: Int] = [:]
     
-    // --- Achievements (Linked to new file) ---
-    @Published var badges: [Achievement] = [] // Uses the struct from LaughAchievements.swift
+    // --- Achievements ---
+    @Published var badges: [Achievement] = []
+    
+    // --- Custom People Management ---
+    @Published var people: [String] = []
     
     init(context: ModelContext) {
         self.modelContext = context
+        
+        // Load custom people or set defaults
+        let savedPeople = UserDefaults.standard.stringArray(forKey: "SavedPeople")
+        self.people = savedPeople ?? ["Friends", "Partner", "Family", "Work", "Self"]
+        
         requestNotificationPermission()
         refreshAll()
     }
@@ -83,10 +114,38 @@ class LaughController: ObservableObject {
         refreshAll()
     }
     
+    func updateLaugh(_ laugh: LaughEntry, mood: String, person: String?) {
+        laugh.mood = mood
+        laugh.person = person
+        try? modelContext.save()
+        refreshAll()
+    }
+    
     func deleteLaugh(_ laugh: LaughEntry) {
         modelContext.delete(laugh)
         try? modelContext.save()
         refreshAll()
+    }
+    
+    // MARK: - People Management Actions
+    func addPerson(_ name: String) {
+        guard !name.isEmpty, !people.contains(name) else { return }
+        people.append(name)
+        savePeople()
+    }
+    
+    func deletePerson(at offsets: IndexSet) {
+        people.remove(atOffsets: offsets)
+        savePeople()
+    }
+    
+    func movePerson(from source: IndexSet, to destination: Int) {
+        people.move(fromOffsets: source, toOffset: destination)
+        savePeople()
+    }
+    
+    private func savePeople() {
+        UserDefaults.standard.set(people, forKey: "SavedPeople")
     }
     
     // MARK: - Data Refresh & Analysis
@@ -106,16 +165,16 @@ class LaughController: ObservableObject {
                 let formatter = RelativeDateTimeFormatter()
                 formatter.unitsStyle = .short
                 let timeStr = formatter.localizedString(for: last.timestamp, relativeTo: Date())
-                self.lastLaughTime = "\(timeStr) \(last.mood)"
+                self.lastLaughTime = timeStr
             } else {
-                self.lastLaughTime = "Tap to smile!"
+                self.lastLaughTime = "None yet"
             }
             
             // 3. Top Stats
-            let people = laughs.compactMap { $0.person }
-            self.topPerson = self.getMostFrequent(arr: people) ?? "None"
+            let peopleList = laughs.compactMap { $0.person }
+            self.topPerson = self.getMostFrequent(arr: peopleList) ?? "---"
             let places = laughs.compactMap { $0.location }
-            self.topLocation = self.getMostFrequent(arr: places) ?? "None"
+            self.topLocation = self.getMostFrequent(arr: places) ?? "---"
             
             // 4. Chart Data
             var chartData: [Date: Int] = [:]
@@ -137,7 +196,7 @@ class LaughController: ObservableObject {
             }
             self.laughsByDate = dateMap
             
-            // 6. Badges (Using NEW Logic)
+            // 6. Badges
             self.badges = AchievementEngine.calculate(laughs: laughs)
             
         } catch { print("Error fetching data") }
