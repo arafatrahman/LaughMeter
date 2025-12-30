@@ -25,19 +25,108 @@ class LaughEntry {
     }
 }
 
-// MARK: - 2. QUOTE MANAGER (New)
+// MARK: - 2. QUOTE MANAGER (100 Unique Funny & Motivated Thoughts)
 struct QuoteManager {
     static let quotes = [
-        "Laughter is the shock absorber that eases the blows of life.",
-        "A day without laughter is a day wasted. – Charlie Chaplin",
-        "Laughter is an instant vacation. – Milton Berle",
-        "Against the assault of laughter, nothing can stand. – Mark Twain",
-        "If you’re too busy to laugh, you are too busy.",
-        "Smile, it confuses people.",
-        "Laughter is the closest distance between two people.",
-        "There is nothing in the world so irresistibly contagious as laughter.",
-        "Optimist: someone who figures that taking a step backward after taking a step forward is not a disaster, it's more like a cha-cha.",
-        "Laugh at your problems, everyone else does."
+        "Be a cupcake in a world of muffins.",
+        "Run like your phone is at 1%.",
+        "If you fall, I’ll be there. – Floor",
+        "Sucking at something is the first step to being sorta good at something.",
+        "Don't stop when you're tired. Stop when you're done (or when the pizza arrives).",
+        "Confidence is 10% hard work and 90% delusion.",
+        "Be the person your dog thinks you are.",
+        "I’m not lazy, I’m on energy saving mode.",
+        "Life is short. Smile while you still have teeth.",
+        "You can’t make everyone happy. You aren’t a jar of Nutella.",
+        "If at first you don't succeed, then skydiving definitely isn't for you.",
+        "My bed is a magical place where I suddenly remember everything I forgot to do.",
+        "Do not take life too seriously. You will never get out of it alive.",
+        "I walk around like everything is fine, but deep down, inside my shoe, my sock is sliding off.",
+        "Being an adult is just googling how to do stuff.",
+        "I am a limited edition. There is only one me.",
+        "The elevator to success is out of order. You’ll have to use the stairs.",
+        "Believe in yourself. An avocado can become guacamole, so you can be anything.",
+        "Everything is figureoutable.",
+        "Drink some coffee and pretend you know what you're doing.",
+        "Life is a shipwreck, but we must not forget to sing in the lifeboats.",
+        "Throw kindness around like confetti.",
+        "Be happy. It drives people crazy.",
+        "If you think you are too small to be effective, you have never been in bed with a mosquito.",
+        "Don’t grow up. It’s a trap.",
+        "Follow your heart, but take your brain with you.",
+        "Strive for progress, not perfection.",
+        "Make today so awesome that yesterday gets jealous.",
+        "A diamond is merely a lump of coal that did well under pressure.",
+        "I’m not bossy, I just have better ideas.",
+        "Life is like a camera. Focus on what’s important. Capture the good times.",
+        "Don't worry, be happy! (And maybe drink some water).",
+        "You’re only human. You don’t have to have it together every minute of every day.",
+        "It’s okay to be a glowstick: sometimes we have to break before we shine.",
+        "Bad decisions make good stories.",
+        "If you see someone without a smile, give them one of yours.",
+        "Don't give up on your dreams. Keep sleeping.",
+        "Stressed is just desserts spelled backwards.",
+        "Nothing is impossible. The word itself says 'I'm possible'!",
+        "Work hard in silence, let your success be the noise.",
+        "Hustle until your haters ask if you're hiring.",
+        "Be the energy you want to attract.",
+        "Today is a good day to have a good day.",
+        "Your vibe attracts your tribe.",
+        "Keep your heels, head, and standards high.",
+        "The best revenge is massive success.",
+        "Dream big. Work hard. Stay humble.",
+        "Do something today that your future self will thank you for.",
+        "Success is the only option.",
+        "You are capable of amazing things.",
+        "Don't wait for opportunity. Create it.",
+        "Great things never come from comfort zones.",
+        "Wake up with determination. Go to bed with satisfaction.",
+        "Happiness is an inside job.",
+        "Positive mind. Positive vibes. Positive life.",
+        "Focus on the good.",
+        "Enjoy the little things.",
+        "Collect moments, not things.",
+        "Life is tough, but so are you.",
+        "Believe you can and you're halfway there.",
+        "Every day is a fresh start.",
+        "Be the change you wish to see in the world.",
+        "Shine bright like a diamond.",
+        "You got this!",
+        "Stay positive, work hard, make it happen.",
+        "Inhale confidence. Exhale doubt.",
+        "Be a warrior, not a worrier.",
+        "Stars can't shine without darkness.",
+        "Mistakes are proof that you are trying.",
+        "Never give up on something you really want.",
+        "Success starts with self-discipline.",
+        "Motivation is what gets you started. Habit is what keeps you going.",
+        "Don't look back. You're not going that way.",
+        "Your only limit is your mind.",
+        "It always seems impossible until it's done.",
+        "The future belongs to those who believe in the beauty of their dreams.",
+        "Start where you are. Use what you have. Do what you can.",
+        "Success doesn't just find you. You have to go out and get it.",
+        "Work until your idols become your rivals.",
+        "Don't stop until you're proud.",
+        "Limit your 'always' and your 'nevers'.",
+        "It’s a slow process, but quitting won’t speed it up.",
+        "Focus on your goal. Don't look in any direction but ahead.",
+        "Action is the foundational key to all success.",
+        "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+        "If you want to fly, give up everything that weighs you down.",
+        "A year from now you will wish you had started today.",
+        "The best way to predict the future is to create it.",
+        "Do what you love, love what you do.",
+        "Live every day as if it were your last.",
+        "Be so good they can't ignore you.",
+        "Success is 99% attitude and 1% aptitude.",
+        "Turn your can’ts into cans and your dreams into plans.",
+        "Fall seven times, stand up eight.",
+        "The expert in anything was once a beginner.",
+        "Don't let yesterday take up too much of today.",
+        "You are stronger than you think.",
+        "One day or day one. You decide.",
+        "Laughter is the best medicine... unless you have diarrhea."
     ]
     
     static func getDailyQuote() -> String {
@@ -53,15 +142,18 @@ class SoundManager {
     static let shared = SoundManager()
     var audioPlayer: AVAudioPlayer?
     
-    func playLaughSound() {
-        if let path = Bundle.main.path(forResource: "laugh", ofType: "mp3") {
+    // --- NEW: Play Custom Smile Sound ---
+    func playSmileSound() {
+        // Ensure you have a file named "smile.mp3" in your project bundle
+        if let path = Bundle.main.path(forResource: "smile", ofType: "mp3") {
             do {
                 audioPlayer = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
                 audioPlayer?.play()
-                return
-            } catch { print("Error playing custom sound") }
+            } catch { print("Error playing smile sound") }
+        } else {
+            // Fallback if file missing: simple click sound
+            playClickSound()
         }
-        AudioServicesPlaySystemSound(1057)
     }
     
     func playClickSound() {
@@ -110,7 +202,6 @@ class LaughController: ObservableObject {
         let newLaugh = LaughEntry(mood: mood, person: person, location: location, note: note)
         modelContext.insert(newLaugh)
         try? modelContext.save()
-        SoundManager.shared.playLaughSound()
         refreshAll()
     }
     

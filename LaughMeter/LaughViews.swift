@@ -19,7 +19,7 @@ struct MainView: View {
     }
 }
 
-// MARK: - 1. HOME VIEW (Redesigned + Quotes)
+// MARK: - 1. HOME VIEW (Redesigned + Quotes + Top Buddy + Custom Sound)
 struct HomeView: View {
     @ObservedObject var controller: LaughController
     @State private var showLogSheet = false
@@ -51,6 +51,26 @@ struct HomeView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                         .foregroundColor(.primary.opacity(0.8))
+                    
+                    // --- TOP BUDDY BADGE ---
+                    if controller.topPerson != "---" {
+                        HStack(spacing: 6) {
+                            Image(systemName: "crown.fill")
+                                .font(.caption)
+                                .foregroundColor(.yellow)
+                                .shadow(color: .orange.opacity(0.5), radius: 2)
+                            
+                            Text("Top Buddy: \(controller.topPerson)")
+                                .font(.caption).bold()
+                                .foregroundColor(.primary.opacity(0.7))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Material.thinMaterial)
+                        .clipShape(Capsule())
+                        .shadow(color: .black.opacity(0.05), radius: 3, x: 0, y: 2)
+                        .padding(.top, 5)
+                    }
                 }
                 .padding(.top, 20)
                 
@@ -69,7 +89,8 @@ struct HomeView: View {
                     }
                     
                     Button(action: {
-                        SoundManager.shared.playClickSound()
+                        // --- PLAY SMILE SOUND HERE ---
+                        SoundManager.shared.playSmileSound()
                         showLogSheet = true
                     }) {
                         ZStack {
@@ -147,7 +168,7 @@ struct AddLaughSheet: View {
     @State private var selectedMood = "😂"
     @State private var person = ""
     
-    let moods = ["😂", "🤣", "🥹", "💀", "🙂"]
+    let moods = ["😂", "🤣", "🥹", "🙂", "💀"]
     
     var body: some View {
         VStack(spacing: 20) {
@@ -164,7 +185,7 @@ struct AddLaughSheet: View {
                         .animation(.spring(), value: selectedMood)
                         .onTapGesture {
                             selectedMood = mood
-                            SoundManager.shared.playClickSound()
+                            SoundManager.shared.playClickSound() // Haptic for selection
                         }
                 }
             }
