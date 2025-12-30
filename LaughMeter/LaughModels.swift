@@ -3,14 +3,14 @@ import SwiftData
 import SwiftUI
 import Combine
 import UserNotifications
-import AVFoundation // For Audio Player
+import AVFoundation
 
 // MARK: - 1. THE MODELS (Data)
 @Model
 class LaughEntry {
     var id: UUID
     var timestamp: Date
-    var mood: String      // "😄", "🤣", "🥹"
+    var mood: String
     var person: String?
     var location: String?
     var note: String?
@@ -25,21 +25,12 @@ class LaughEntry {
     }
 }
 
-struct Badge: Identifiable, Hashable {
-    let id = UUID()
-    let name: String
-    let icon: String
-    let description: String
-    var isUnlocked: Bool
-}
-
-// MARK: - 2. SOUND MANAGER (New!)
+// MARK: - 2. SOUND MANAGER
 class SoundManager {
     static let shared = SoundManager()
     var audioPlayer: AVAudioPlayer?
     
     func playLaughSound() {
-        // 1. Try to play a custom "laugh.mp3" if you added one to the project
         if let path = Bundle.main.path(forResource: "laugh", ofType: "mp3") {
             do {
                 audioPlayer = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
@@ -47,14 +38,10 @@ class SoundManager {
                 return
             } catch { print("Error playing custom sound") }
         }
-        
-        // 2. Fallback: System "Tink" Sound (Cheery and bright)
-        // ID 1057 is a distinct 'Tink', 1022 is a 'Success' chime
         AudioServicesPlaySystemSound(1057)
     }
     
     func playClickSound() {
-        // Soft click for UI interactions
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()
     }
@@ -69,7 +56,7 @@ class LaughController: ObservableObject {
     @Published var dailyCount: Int = 0
     @Published var weeklyStreak: Int = 0
     
-    // --- Dashboard Stats ---
+    // --- Stats ---
     @Published var topPerson: String = "---"
     @Published var topLocation: String = "---"
     @Published var lastLaughTime: String = "Start your day!"
@@ -78,8 +65,8 @@ class LaughController: ObservableObject {
     // --- Calendar Helper ---
     @Published var laughsByDate: [Date: Int] = [:]
     
-    // --- Achievements ---
-    @Published var badges: [Badge] = []
+    // --- Achievements (Linked to new file) ---
+    @Published var badges: [Achievement] = [] // Uses the struct from LaughAchievements.swift
     
     init(context: ModelContext) {
         self.modelContext = context
@@ -92,12 +79,7 @@ class LaughController: ObservableObject {
         let newLaugh = LaughEntry(mood: mood, person: person, location: location, note: note)
         modelContext.insert(newLaugh)
         try? modelContext.save()
-        
-        // Play Sound & Haptics
         SoundManager.shared.playLaughSound()
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
         refreshAll()
     }
     
@@ -119,7 +101,7 @@ class LaughController: ObservableObject {
             self.dailyCount = laughs.filter { calendar.isDateInToday($0.timestamp) }.count
             self.weeklyStreak = self.dailyCount > 0 ? 1 : 0
             
-            // 2. Last Laugh Logic
+            // 2. Last Laugh
             if let last = laughs.first, calendar.isDateInToday(last.timestamp) {
                 let formatter = RelativeDateTimeFormatter()
                 formatter.unitsStyle = .short
@@ -132,7 +114,6 @@ class LaughController: ObservableObject {
             // 3. Top Stats
             let people = laughs.compactMap { $0.person }
             self.topPerson = self.getMostFrequent(arr: people) ?? "None"
-            
             let places = laughs.compactMap { $0.location }
             self.topLocation = self.getMostFrequent(arr: places) ?? "None"
             
@@ -156,14 +137,13 @@ class LaughController: ObservableObject {
             }
             self.laughsByDate = dateMap
             
-            // 6. Badges
-            self.updateBadges(totalLaughs: laughs.count)
+            // 6. Badges (Using NEW Logic)
+            self.badges = AchievementEngine.calculate(laughs: laughs)
             
         } catch { print("Error fetching data") }
     }
     
     func generateCSV() -> String {
-        // Simple CSV generation
         let descriptor = FetchDescriptor<LaughEntry>(sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
         guard let laughs = try? modelContext.fetch(descriptor) else { return "Error" }
         var csv = "Date,Mood,Person,Location\n"
@@ -176,16 +156,6 @@ class LaughController: ObservableObject {
     private func getMostFrequent(arr: [String]) -> String? {
         let counts = arr.reduce(into: [:]) { $0[$1, default: 0] += 1 }
         return counts.max(by: { $0.value < $1.value })?.key
-    }
-    
-    private func updateBadges(totalLaughs: Int) {
-        let definitions = [
-            (name: "First Giggles", icon: "😂", desc: "First 10 laughs", threshold: 10),
-            (name: "Joy Master", icon: "👑", desc: "100 laughs", threshold: 100)
-        ]
-        self.badges = definitions.map { def in
-            Badge(name: def.name, icon: def.icon, description: def.desc, isUnlocked: totalLaughs >= def.threshold)
-        }
     }
     
     func requestNotificationPermission() {

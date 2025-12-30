@@ -12,6 +12,7 @@ struct MainView: View {
             HomeView(controller: controller).tabItem { Label("Home", systemImage: "face.smiling") }
             JournalView(controller: controller).tabItem { Label("Journal", systemImage: "book") }
             StatsView(controller: controller).tabItem { Label("Insights", systemImage: "chart.bar.fill") }
+            AchievementsView(controller: controller).tabItem { Label("Awards", systemImage: "trophy.fill") } // <--- NEW TAB
             SettingsView(controller: controller).tabItem { Label("Settings", systemImage: "gear") }
         }
         .accentColor(.orange)
@@ -365,10 +366,9 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section("Data") { ShareLink(item: controller.generateCSV()) { Label("Export CSV", systemImage: "arrow.down.doc") } }
-                Section("Achievements") {
-                    ForEach(controller.badges) { b in
-                        HStack { Text(b.icon); Text(b.name); Spacer(); Image(systemName: b.isUnlocked ? "checkmark.circle.fill" : "lock.fill").foregroundColor(b.isUnlocked ? .green : .gray) }
-                    }
+                Section("About") {
+                    Text("Version 1.1")
+                    Text("LaughMeter with 30+ Achievements")
                 }
             }.navigationTitle("Settings")
         }
