@@ -102,7 +102,7 @@ struct HomeView: View {
                     Button(action: { showLogSheet = true }) {
                         ZStack {
                             Circle().fill(LinearGradient(colors: [.orange, .yellow], startPoint: .top, endPoint: .bottom)).frame(width: 200, height: 200).shadow(color: .orange.opacity(0.4), radius: 20, x: 0, y: 10)
-                            VStack(spacing: 5) { Text("😄").font(.system(size: 80)).shadow(radius: 5); Text("TAP TO LOG").font(.caption).bold().foregroundColor(.white) }
+                            VStack(spacing: 5) { Text("😂").font(.system(size: 80)).shadow(radius: 5); Text("TAP TO LOG").font(.caption).bold().foregroundColor(.white) }
                         }
                     }
                 }.padding(.vertical, 30).onAppear { isBreathing = true }
