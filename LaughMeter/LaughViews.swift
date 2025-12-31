@@ -5,10 +5,13 @@ import Charts
 // MARK: - MAIN TAB
 struct MainView: View {
     @StateObject private var controller: LaughController
+    @State private var showSplash = true // STATE FOR SPLASH SCREEN
+    
     init(context: ModelContext) { _controller = StateObject(wrappedValue: LaughController(context: context)) }
     
     var body: some View {
         ZStack {
+            // 1. MAIN APP CONTENT
             TabView {
                 HomeView(controller: controller).tabItem { Label("Home", systemImage: "face.smiling") }
                 JournalView(controller: controller).tabItem { Label("Journal", systemImage: "book") }
@@ -18,12 +21,93 @@ struct MainView: View {
             }
             .accentColor(.orange)
             
+            // 2. ACHIEVEMENT POPUP OVERLAY
             if controller.showAchievementPopup, let badge = controller.newlyUnlockedBadge {
                 AchievementPopup(badge: badge) {
                     withAnimation {
                         controller.showAchievementPopup = false
                         controller.newlyUnlockedBadge = nil
                     }
+                }
+            }
+            
+            // 3. SPLASH SCREEN OVERLAY
+            if showSplash {
+                SplashScreen(showSplash: $showSplash)
+                    .transition(.opacity)
+                    .zIndex(100) // Keeps it on top
+            }
+        }
+    }
+}
+
+// MARK: - SPLASH SCREEN (UPDATED: Bigger Logo, No White Bg)
+struct SplashScreen: View {
+    @Binding var showSplash: Bool
+    @State private var scale = 0.8
+    @State private var opacity = 0.0
+    
+    var body: some View {
+        ZStack {
+            // 1. SOLID BACKGROUND
+            Color.orange.ignoresSafeArea()
+            
+            LinearGradient(
+                colors: [Color.orange, Color.yellow],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            // 2. CONTENT
+            VStack(spacing: 20) {
+                Spacer()
+                
+                // LOGO AREA (No white background, just the logo)
+                ZStack {
+                    Image("AppLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 200, height: 200) // BIGGER LOGO
+                        .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 10)
+                }
+                .scaleEffect(scale)
+                
+                // Text Info
+                VStack(spacing: 5) {
+                    Text("LaughMeter")
+                        .font(.system(size: 40, weight: .heavy, design: .rounded))
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 2)
+                    
+                    Text("Daily Dose of Joy")
+                        .font(.headline)
+                        .foregroundColor(.white.opacity(0.9))
+                        .tracking(2)
+                }
+                .padding(.top, 10)
+                .opacity(opacity)
+                
+                Spacer()
+                
+                // Loading Indicator at Bottom
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
+                    .padding(.bottom, 50)
+            }
+        }
+        .onAppear {
+            // Animate In
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+                scale = 1.0
+                opacity = 1.0
+            }
+            
+            // Wait and Animate Out
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                withAnimation(.easeOut(duration: 0.4)) {
+                    showSplash = false
                 }
             }
         }
@@ -69,7 +153,7 @@ struct ParticleModifier: GeometryEffect {
     func effectValue(size: CGSize) -> ProjectionTransform { let distance = animate ? 150.0 : 0.0; let x = distance * cos(angle * .pi / 180); let y = distance * sin(angle * .pi / 180); return ProjectionTransform(CGAffineTransform(translationX: x, y: y)) }
 }
 
-// MARK: - 1. HOME VIEW (UPDATED)
+// MARK: - 1. HOME VIEW
 struct HomeView: View {
     @ObservedObject var controller: LaughController
     @State private var showLogSheet = false
@@ -98,18 +182,26 @@ struct HomeView: View {
                 ZStack {
                     ForEach(0..<3) { i in Circle().stroke(Color.orange.opacity(0.3), lineWidth: 1).frame(width: 250 + CGFloat(i*30), height: 250 + CGFloat(i*30)).scaleEffect(isBreathing ? 1.05 : 1.0).opacity(isBreathing ? 0.5 : 0.2).animation(.easeInOut(duration: 2).repeatForever(autoreverses: true).delay(Double(i)*0.2), value: isBreathing) }
                     
-                    // REMOVED SOUND HERE - It now only plays on "Save"
                     Button(action: { showLogSheet = true }) {
                         ZStack {
                             Circle().fill(LinearGradient(colors: [.orange, .yellow], startPoint: .top, endPoint: .bottom)).frame(width: 200, height: 200).shadow(color: .orange.opacity(0.4), radius: 20, x: 0, y: 10)
-                            VStack(spacing: 5) { Text("😂").font(.system(size: 80)).shadow(radius: 5); Text("TAP TO LOG").font(.caption).bold().foregroundColor(.white) }
+                            VStack(spacing: 10) {
+                                // APP LOGO IMAGE
+                                Image("AppLogo")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 110, height: 110)
+                                    .shadow(radius: 5)
+                                
+                                Text("TAP TO LOG").font(.caption).bold().foregroundColor(.white)
+                            }
                         }
                     }
                 }.padding(.vertical, 30).onAppear { isBreathing = true }
                 
                 Spacer()
                 
-                // --- REDESIGNED BOTTOM CARDS (Vibrant Gradient Blocks) ---
+                // --- BOTTOM CARDS ---
                 HStack(spacing: 15) {
                     // 1. TODAY
                     StatBlock(
@@ -127,7 +219,7 @@ struct HomeView: View {
                         gradient: LinearGradient(colors: [.orange, .yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
                     )
                     
-                    // 3. LAST (Adjusted text size for time)
+                    // 3. LAST
                     StatBlock(
                         title: "LAST SMILE",
                         value: controller.lastLaughTime,
@@ -197,7 +289,7 @@ struct StatBlock: View {
     }
 }
 
-// MARK: - 2. LOG/EDIT SHEET (UPDATED WITH SOUND)
+// MARK: - 2. LOG/EDIT SHEET
 struct AddLaughSheet: View {
     @ObservedObject var controller: LaughController
     @Environment(\.dismiss) var dismiss
@@ -277,7 +369,7 @@ struct AddLaughSheet: View {
     }
 }
 
-// MARK: - 3. JOURNAL VIEW (Same)
+// MARK: - 3. JOURNAL VIEW
 struct JournalView: View {
     @ObservedObject var controller: LaughController
     @State private var viewMode = 0; @State private var selectedDate: Date = Date(); @State private var laughToEdit: LaughEntry?; @Query(sort: \LaughEntry.timestamp, order: .reverse) var laughs: [LaughEntry]
@@ -310,7 +402,7 @@ struct CalendarView: View {
     func moveMonth(by value: Int) { if let newDate = Calendar.current.date(byAdding: .month, value: value, to: selectedDate) { selectedDate = newDate } }
 }
 
-// MARK: - 4. STATS VIEW (Same)
+// MARK: - 4. STATS VIEW
 struct StatsView: View {
     @ObservedObject var controller: LaughController
     var body: some View {
@@ -340,8 +432,71 @@ struct StatsView: View {
 }
 struct StatBox: View { let title: String; let value: String; let icon: String; let color: Color; var body: some View { VStack(alignment: .leading, spacing: 10) { Image(systemName: icon).font(.title2).foregroundColor(color); VStack(alignment: .leading, spacing: 2) { Text(value).font(.title2).bold(); Text(title).font(.caption).foregroundColor(.secondary) } }.frame(maxWidth: .infinity, alignment: .leading).padding().background(Color.white).cornerRadius(20).shadow(color: .black.opacity(0.05), radius: 5) } }
 
-// MARK: - 5. SETTINGS VIEW (Same)
+// MARK: - 5. SETTINGS VIEW (UPDATED: Preferences)
 struct SettingsView: View {
-    @ObservedObject var controller: LaughController; @State private var newPersonName: String = ""; @State private var isAddingPerson = false
-    var body: some View { NavigationStack { Form { Section(header: Text("Manage People")) { ForEach(controller.people, id: \.self) { person in Label(person, systemImage: "person.fill") }.onDelete { idx in controller.deletePerson(at: idx) }.onMove { src, dst in controller.movePerson(from: src, to: dst) }; Button(action: { isAddingPerson = true }) { Label("Add Person", systemImage: "plus.circle.fill").foregroundColor(.blue) } }; Section(header: Text("Data Management")) { ShareLink(item: controller.generateCSV()) { Label("Export Journal to CSV", systemImage: "arrow.down.doc") } }; Section(header: Text("About")) { HStack { Text("Version"); Spacer(); Text("1.3.0").foregroundColor(.secondary) }; Text("LaughMeter: Daily quotes, better stats, and pure joy.").font(.caption).foregroundColor(.secondary) } }.navigationTitle("Settings").toolbar { EditButton() }.alert("Add New Person", isPresented: $isAddingPerson) { TextField("Name", text: $newPersonName); Button("Cancel", role: .cancel) { newPersonName = "" }; Button("Add") { controller.addPerson(newPersonName); newPersonName = "" } } message: { Text("Enter the name of a friend, group, or context you laugh with.") } } }
+    @ObservedObject var controller: LaughController
+    @State private var newPersonName: String = ""
+    @State private var isAddingPerson = false
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                // SECTION 1: PREFERENCES (New)
+                Section(header: Text("Preferences")) {
+                    Toggle(isOn: $controller.isNotificationsEnabled) {
+                        Label("Enable Notifications", systemImage: "bell.fill")
+                    }
+                    Toggle(isOn: $controller.isSoundEnabled) {
+                        Label("Play Sounds", systemImage: "speaker.wave.2.fill")
+                    }
+                }
+                
+                // SECTION 2: PEOPLE
+                Section(header: Text("Manage People")) {
+                    ForEach(controller.people, id: \.self) { person in
+                        Label(person, systemImage: "person.fill")
+                    }
+                    .onDelete { idx in controller.deletePerson(at: idx) }
+                    .onMove { src, dst in controller.movePerson(from: src, to: dst) }
+                    
+                    Button(action: { isAddingPerson = true }) {
+                        Label("Add Person", systemImage: "plus.circle.fill")
+                            .foregroundColor(.blue)
+                    }
+                }
+                
+                // SECTION 3: DATA
+                Section(header: Text("Data Management")) {
+                    ShareLink(item: controller.generateCSV()) {
+                        Label("Export Journal to CSV", systemImage: "arrow.down.doc")
+                    }
+                }
+                
+                // SECTION 4: ABOUT
+                Section(header: Text("About")) {
+                    HStack {
+                        Text("Version")
+                        Spacer()
+                        Text("1.4.0")
+                            .foregroundColor(.secondary)
+                    }
+                    Text("LaughMeter: Daily quotes, better stats, and pure joy.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .navigationTitle("Settings")
+            .toolbar { EditButton() }
+            .alert("Add New Person", isPresented: $isAddingPerson) {
+                TextField("Name", text: $newPersonName)
+                Button("Cancel", role: .cancel) { newPersonName = "" }
+                Button("Add") {
+                    controller.addPerson(newPersonName)
+                    newPersonName = ""
+                }
+            } message: {
+                Text("Enter the name of a friend, group, or context you laugh with.")
+            }
+        }
+    }
 }

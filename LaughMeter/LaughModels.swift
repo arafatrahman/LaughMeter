@@ -151,7 +151,14 @@ class SoundManager {
     static let shared = SoundManager()
     var audioPlayer: AVAudioPlayer?
     
+    // Check UserDefaults directly to respect the setting
+    var isSoundEnabled: Bool {
+        return UserDefaults.standard.object(forKey: "isSoundEnabled") as? Bool ?? true
+    }
+    
     func playSmileSound() {
+        guard isSoundEnabled else { return } // Check setting
+        
         if let path = Bundle.main.path(forResource: "smile", ofType: "mp3") {
             do {
                 audioPlayer = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
@@ -163,6 +170,7 @@ class SoundManager {
     }
     
     func playClickSound() {
+        guard isSoundEnabled else { return } // Check setting
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()
     }
@@ -180,7 +188,7 @@ class LaughController: ObservableObject {
     @Published var laughsByDate: [Date: Int] = [:] // For Calendar
     
     // --- Top Stats (Used in HomeView) ---
-    @Published var topPerson: String = "---" // <--- THIS IS THE PROPERTY THE COMPILER WAS MISSING
+    @Published var topPerson: String = "---"
     @Published var topLocation: String = "---"
     
     // --- Insights Filter State ---
@@ -202,12 +210,33 @@ class LaughController: ObservableObject {
     
     // --- People ---
     @Published var people: [String] = []
+    
+    // --- Settings (Notifications & Sound) ---
+    @Published var isNotificationsEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isNotificationsEnabled, forKey: "isNotificationsEnabled")
+            scheduleSmartNotifications() // Refresh logic when toggled
+        }
+    }
+    @Published var isSoundEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isSoundEnabled, forKey: "isSoundEnabled")
+        }
+    }
+    
     private var isFirstLoad = true
     
     init(context: ModelContext) {
         self.modelContext = context
+        
+        // Load People
         let savedPeople = UserDefaults.standard.stringArray(forKey: "SavedPeople")
         self.people = savedPeople ?? ["Friends", "Partner", "Family", "Work", "Self"]
+        
+        // Load Settings
+        self.isNotificationsEnabled = UserDefaults.standard.object(forKey: "isNotificationsEnabled") as? Bool ?? true
+        self.isSoundEnabled = UserDefaults.standard.object(forKey: "isSoundEnabled") as? Bool ?? true
+        
         requestNotificationPermission()
         refreshAll()
     }
@@ -293,6 +322,9 @@ class LaughController: ObservableObject {
             // 4. Update Insights (using default or current selection)
             updateInsights()
             
+            // 5. Update Notifications based on new daily count
+            scheduleSmartNotifications()
+            
         } catch { print("Error refreshing") }
     }
     
@@ -374,6 +406,65 @@ class LaughController: ObservableObject {
         self.insightsChartUnit = component
     }
     
+    // MARK: - Notifications Logic
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if granted {
+                print("Notification permission granted.")
+            }
+        }
+    }
+    
+    /// Schedules daily notifications based on the current laugh count.
+    /// Needs to be called whenever data changes (refreshAll).
+    func scheduleSmartNotifications() {
+        // 1. Clear existing pending requests so we don't duplicate or send irrelevant ones
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        
+        // 2. Check if user has disabled notifications
+        guard isNotificationsEnabled else { return }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // --- Trigger 1: If 0 Laughs, remind at 6 PM ---
+        if dailyCount == 0 {
+            var dateComponents = calendar.dateComponents([.year, .month, .day], from: now)
+            dateComponents.hour = 18 // 6:00 PM
+            dateComponents.minute = 0
+            
+            // Only schedule if the time hasn't passed yet today
+            if let triggerDate = calendar.date(from: dateComponents), triggerDate > now {
+                let content = UNMutableNotificationContent()
+                content.title = "No laughs yet? 🫤"
+                content.body = "The day isn't over! Find a reason to smile and log it."
+                content.sound = .default
+                
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+                let request = UNNotificationRequest(identifier: "daily_reminder_zero", content: content, trigger: trigger)
+                UNUserNotificationCenter.current().add(request)
+            }
+        }
+        
+        // --- Trigger 2: If < 3 Laughs (but > 0), encourage at 8 PM ---
+        if dailyCount > 0 && dailyCount < 3 {
+            var dateComponents = calendar.dateComponents([.year, .month, .day], from: now)
+            dateComponents.hour = 20 // 8:00 PM
+            dateComponents.minute = 0
+            
+            if let triggerDate = calendar.date(from: dateComponents), triggerDate > now {
+                let content = UNMutableNotificationContent()
+                content.title = "Keep the joy going! 😂"
+                content.body = "You have \(dailyCount) laughs today. Try to reach 3 for a daily streak!"
+                content.sound = .default
+                
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+                let request = UNNotificationRequest(identifier: "daily_reminder_low", content: content, trigger: trigger)
+                UNUserNotificationCenter.current().add(request)
+            }
+        }
+    }
+    
     // MARK: - Helpers
     func addPerson(_ name: String) {
         guard !name.isEmpty, !people.contains(name) else { return }
@@ -403,8 +494,5 @@ class LaughController: ObservableObject {
     private func getMostFrequent(arr: [String]) -> String? {
         let counts = arr.reduce(into: [:]) { $0[$1, default: 0] += 1 }
         return counts.max(by: { $0.value < $1.value })?.key
-    }
-    func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 }
