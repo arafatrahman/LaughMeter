@@ -5,6 +5,16 @@ import Combine
 import UserNotifications
 import AVFoundation
 
+// MARK: - Enums
+enum TimeRange: String, CaseIterable, Identifiable {
+    case daily = "Today"
+    case weekly = "Week"
+    case monthly = "Month"
+    case yearly = "Year"
+    case custom = "Custom"
+    var id: String { self.rawValue }
+}
+
 // MARK: - 1. THE MODELS (Data)
 @Model
 class LaughEntry {
@@ -25,7 +35,7 @@ class LaughEntry {
     }
 }
 
-// MARK: - 2. QUOTE MANAGER (100 Unique Funny & Motivated Thoughts)
+// MARK: - 2. QUOTE MANAGER
 struct QuoteManager {
     static let quotes = [
         "Be a cupcake in a world of muffins.",
@@ -130,7 +140,6 @@ struct QuoteManager {
     ]
     
     static func getDailyQuote() -> String {
-        // Pick a quote based on the day of the year so it stays same for the whole day
         let dayOfYear = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
         let index = dayOfYear % quotes.count
         return quotes[index]
@@ -142,16 +151,13 @@ class SoundManager {
     static let shared = SoundManager()
     var audioPlayer: AVAudioPlayer?
     
-    // --- NEW: Play Custom Smile Sound ---
     func playSmileSound() {
-        // Ensure you have a file named "smile.mp3" in your project bundle
         if let path = Bundle.main.path(forResource: "smile", ofType: "mp3") {
             do {
                 audioPlayer = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
                 audioPlayer?.play()
             } catch { print("Error playing smile sound") }
         } else {
-            // Fallback if file missing: simple click sound
             playClickSound()
         }
     }
@@ -167,32 +173,41 @@ class SoundManager {
 class LaughController: ObservableObject {
     var modelContext: ModelContext
     
-    // --- UI State ---
+    // --- Global Home State ---
     @Published var dailyCount: Int = 0
     @Published var weeklyStreak: Int = 0
-    
-    // --- Stats ---
-    @Published var topPerson: String = "---"
-    @Published var topLocation: String = "---"
     @Published var lastLaughTime: String = "Start your day!"
-    @Published var weeklyChartData: [Date: Int] = [:]
+    @Published var laughsByDate: [Date: Int] = [:] // For Calendar
     
-    // --- Calendar Helper ---
-    @Published var laughsByDate: [Date: Int] = [:]
+    // --- Top Stats (Used in HomeView) ---
+    @Published var topPerson: String = "---" // <--- THIS IS THE PROPERTY THE COMPILER WAS MISSING
+    @Published var topLocation: String = "---"
     
-    // --- Achievements ---
+    // --- Insights Filter State ---
+    @Published var selectedTimeRange: TimeRange = .weekly
+    @Published var customStartDate: Date = Date().addingTimeInterval(-604800) // Default: Last 7 days
+    @Published var customEndDate: Date = Date()
+    
+    // --- Insights Filtered Data ---
+    @Published var insightsTotal: Int = 0
+    @Published var insightsTopPerson: String = "---"
+    @Published var insightsChartData: [Date: Int] = [:]
+    @Published var insightsChartUnit: Calendar.Component = .day
+    @Published var totalLaughs: Int = 0
+    
+    // --- Achievements & Popups ---
     @Published var badges: [Achievement] = []
+    @Published var showAchievementPopup = false
+    @Published var newlyUnlockedBadge: Achievement?
     
-    // --- Custom People Management ---
+    // --- People ---
     @Published var people: [String] = []
+    private var isFirstLoad = true
     
     init(context: ModelContext) {
         self.modelContext = context
-        
-        // Load custom people or set defaults
         let savedPeople = UserDefaults.standard.stringArray(forKey: "SavedPeople")
         self.people = savedPeople ?? ["Friends", "Partner", "Family", "Work", "Self"]
-        
         requestNotificationPermission()
         refreshAll()
     }
@@ -218,96 +233,177 @@ class LaughController: ObservableObject {
         refreshAll()
     }
     
-    // MARK: - People Management Actions
+    // MARK: - Data Refresh
+    func refreshAll() {
+        let descriptor = FetchDescriptor<LaughEntry>(sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
+        do {
+            let laughs = try modelContext.fetch(descriptor)
+            self.totalLaughs = laughs.count
+            
+            // 1. Global Home Stats
+            let calendar = Calendar.current
+            self.dailyCount = laughs.filter { calendar.isDateInToday($0.timestamp) }.count
+            
+            // Global Streak Logic
+            let daysWithLaughs = Set(laughs.map { calendar.startOfDay(for: $0.timestamp) })
+            let today = calendar.startOfDay(for: Date())
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+            var streak = 0
+            var checkDate = daysWithLaughs.contains(today) ? today : yesterday
+            while daysWithLaughs.contains(checkDate) {
+                streak += 1
+                guard let prev = calendar.date(byAdding: .day, value: -1, to: checkDate) else { break }
+                checkDate = prev
+            }
+            self.weeklyStreak = streak
+            
+            // Last Laugh
+            if let last = laughs.first, calendar.isDateInToday(last.timestamp) {
+                let formatter = RelativeDateTimeFormatter()
+                formatter.unitsStyle = .short
+                self.lastLaughTime = formatter.localizedString(for: last.timestamp, relativeTo: Date())
+            } else { self.lastLaughTime = "None yet" }
+            
+            // Calendar Data
+            var dateMap: [Date: Int] = [:]
+            for laugh in laughs {
+                dateMap[calendar.startOfDay(for: laugh.timestamp), default: 0] += 1
+            }
+            self.laughsByDate = dateMap
+            
+            // 2. Global Top Stats
+            let allPeople = laughs.compactMap { $0.person }
+            self.topPerson = getMostFrequent(arr: allPeople) ?? "---"
+            let allPlaces = laughs.compactMap { $0.location }
+            self.topLocation = getMostFrequent(arr: allPlaces) ?? "---"
+            
+            // 3. Achievements
+            let calculatedBadges = AchievementEngine.calculate(laughs: laughs)
+            if !isFirstLoad {
+                let oldIDs = Set(self.badges.filter { $0.isUnlocked }.map { $0.id })
+                let newUnlocks = calculatedBadges.filter { $0.isUnlocked && !oldIDs.contains($0.id) }
+                if let first = newUnlocks.first {
+                    self.newlyUnlockedBadge = first
+                    withAnimation { self.showAchievementPopup = true }
+                    SoundManager.shared.playSmileSound()
+                }
+            } else { isFirstLoad = false }
+            self.badges = calculatedBadges
+            
+            // 4. Update Insights (using default or current selection)
+            updateInsights()
+            
+        } catch { print("Error refreshing") }
+    }
+    
+    // MARK: - FILTERING LOGIC
+    func updateInsights() {
+        let descriptor = FetchDescriptor<LaughEntry>(sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
+        guard let allLaughs = try? modelContext.fetch(descriptor) else { return }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        var start: Date
+        var end: Date = now
+        var component: Calendar.Component = .day
+        
+        // 1. Determine Range
+        switch selectedTimeRange {
+        case .daily:
+            start = calendar.startOfDay(for: now)
+            end = calendar.date(byAdding: .day, value: 1, to: start)!
+            component = .hour
+        case .weekly:
+            start = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now))! // Last 7 days
+            end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
+            component = .day
+        case .monthly:
+            start = calendar.date(byAdding: .month, value: -1, to: calendar.startOfDay(for: now))!
+            end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
+            component = .day
+        case .yearly:
+            start = calendar.date(byAdding: .year, value: -1, to: calendar.startOfDay(for: now))!
+            end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
+            component = .month
+        case .custom:
+            start = calendar.startOfDay(for: customStartDate)
+            end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: customEndDate))!
+            let dayDiff = calendar.dateComponents([.day], from: start, to: end).day ?? 0
+            if dayDiff <= 2 { component = .hour }
+            else if dayDiff <= 60 { component = .day }
+            else { component = .month }
+        }
+        
+        // 2. Filter Data
+        let filtered = allLaughs.filter { $0.timestamp >= start && $0.timestamp < end }
+        self.insightsTotal = filtered.count
+        
+        let peopleList = filtered.compactMap { $0.person }
+        self.insightsTopPerson = getMostFrequent(arr: peopleList) ?? "---"
+        
+        // 3. Generate Chart Data
+        var data: [Date: Int] = [:]
+        
+        // Pre-fill zero values for the X-axis
+        var ptr = start
+        while ptr < end {
+            data[ptr] = 0
+            if component == .hour { ptr = calendar.date(byAdding: .hour, value: 1, to: ptr)! }
+            else if component == .day { ptr = calendar.date(byAdding: .day, value: 1, to: ptr)! }
+            else { ptr = calendar.date(byAdding: .month, value: 1, to: ptr)! }
+        }
+        
+        // Fill real data
+        for laugh in filtered {
+            var dateKey: Date
+            if component == .hour {
+                let comps = calendar.dateComponents([.year, .month, .day, .hour], from: laugh.timestamp)
+                dateKey = calendar.date(from: comps)!
+            } else if component == .day {
+                dateKey = calendar.startOfDay(for: laugh.timestamp)
+            } else {
+                let comps = calendar.dateComponents([.year, .month], from: laugh.timestamp)
+                dateKey = calendar.date(from: comps)!
+            }
+            if dateKey >= start && dateKey < end {
+                data[dateKey, default: 0] += 1
+            }
+        }
+        
+        self.insightsChartData = data
+        self.insightsChartUnit = component
+    }
+    
+    // MARK: - Helpers
     func addPerson(_ name: String) {
         guard !name.isEmpty, !people.contains(name) else { return }
         people.append(name)
-        savePeople()
+        UserDefaults.standard.set(people, forKey: "SavedPeople")
     }
-    
     func deletePerson(at offsets: IndexSet) {
         people.remove(atOffsets: offsets)
         savePeople()
     }
-    
     func movePerson(from source: IndexSet, to destination: Int) {
         people.move(fromOffsets: source, toOffset: destination)
         savePeople()
     }
-    
     private func savePeople() {
         UserDefaults.standard.set(people, forKey: "SavedPeople")
     }
-    
-    // MARK: - Data Refresh & Analysis
-    func refreshAll() {
-        let descriptor = FetchDescriptor<LaughEntry>(sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
-        
-        do {
-            let laughs = try modelContext.fetch(descriptor)
-            let calendar = Calendar.current
-            
-            // 1. Basic Counts
-            self.dailyCount = laughs.filter { calendar.isDateInToday($0.timestamp) }.count
-            self.weeklyStreak = self.dailyCount > 0 ? 1 : 0
-            
-            // 2. Last Laugh
-            if let last = laughs.first, calendar.isDateInToday(last.timestamp) {
-                let formatter = RelativeDateTimeFormatter()
-                formatter.unitsStyle = .short
-                let timeStr = formatter.localizedString(for: last.timestamp, relativeTo: Date())
-                self.lastLaughTime = timeStr
-            } else {
-                self.lastLaughTime = "None yet"
-            }
-            
-            // 3. Top Stats
-            let peopleList = laughs.compactMap { $0.person }
-            self.topPerson = self.getMostFrequent(arr: peopleList) ?? "---"
-            let places = laughs.compactMap { $0.location }
-            self.topLocation = self.getMostFrequent(arr: places) ?? "---"
-            
-            // 4. Chart Data
-            var chartData: [Date: Int] = [:]
-            let today = Date()
-            for i in 0..<7 {
-                if let date = calendar.date(byAdding: .day, value: -i, to: today) {
-                    let start = calendar.startOfDay(for: date)
-                    let count = laughs.filter { calendar.isDate( $0.timestamp, inSameDayAs: date) }.count
-                    chartData[start] = count
-                }
-            }
-            self.weeklyChartData = chartData
-            
-            // 5. Calendar Map
-            var dateMap: [Date: Int] = [:]
-            for laugh in laughs {
-                let start = calendar.startOfDay(for: laugh.timestamp)
-                dateMap[start, default: 0] += 1
-            }
-            self.laughsByDate = dateMap
-            
-            // 6. Badges
-            self.badges = AchievementEngine.calculate(laughs: laughs)
-            
-        } catch { print("Error fetching data") }
-    }
-    
     func generateCSV() -> String {
         let descriptor = FetchDescriptor<LaughEntry>(sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
         guard let laughs = try? modelContext.fetch(descriptor) else { return "Error" }
-        var csv = "Date,Mood,Person,Location\n"
+        var csv = "Date,Mood,Person,Location,Note\n"
         for l in laughs {
-            csv += "\(l.timestamp),\(l.mood),\(l.person ?? ""),\(l.location ?? "")\n"
+            csv += "\(l.timestamp),\(l.mood),\(l.person ?? ""),\(l.location ?? ""),\(l.note ?? "")\n"
         }
         return csv
     }
-    
     private func getMostFrequent(arr: [String]) -> String? {
         let counts = arr.reduce(into: [:]) { $0[$1, default: 0] += 1 }
         return counts.max(by: { $0.value < $1.value })?.key
     }
-    
     func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }

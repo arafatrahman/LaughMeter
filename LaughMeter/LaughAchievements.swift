@@ -18,9 +18,21 @@ class AchievementEngine {
         let count = laughs.count
         let calendar = Calendar.current
         
-        // Helper: Calculate streak
-        // (Simplified logic: checks if there is at least 1 laugh today)
-        let streak = laughs.filter { calendar.isDateInToday($0.timestamp) }.count > 0 ? 1 : 0
+        // --- HELPER: REAL STREAK CALCULATION ---
+        let daysWithLaughs = Set(laughs.map { calendar.startOfDay(for: $0.timestamp) })
+        let today = calendar.startOfDay(for: Date())
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        
+        var streak = 0
+        // If we laughed today, start checking from today. If not, check from yesterday (streak is preserved until midnight).
+        var checkDate = daysWithLaughs.contains(today) ? today : yesterday
+        
+        // Loop backwards as long as we find a consecutive day
+        while daysWithLaughs.contains(checkDate) {
+            streak += 1
+            guard let previousDay = calendar.date(byAdding: .day, value: -1, to: checkDate) else { break }
+            checkDate = previousDay
+        }
         
         // Helper: Counts by Context
         let homeCount = laughs.filter { ($0.location ?? "").lowercased().contains("home") }.count
@@ -39,7 +51,7 @@ class AchievementEngine {
             return hour >= 22 || hour < 4
         }.count
 
-        // --- THE 30 ACHIEVEMENTS ---
+        // --- THE ACHIEVEMENTS LIST ---
         let list: [(id: String, title: String, desc: String, icon: String, col: Color, unlocked: Bool)] = [
             // Level 1: Basics
             ("1", "First Smile", "Log your first laugh", "🙂", .blue, count >= 1),
@@ -75,7 +87,8 @@ class AchievementEngine {
             ("23", "Heart Warmed", "Log '🥹' mood", "🥹", .pink, laughs.contains { $0.mood == "🥹" }),
             
             // Level 6: Habits
-            ("24", "Streak Starter", "Laugh today (Start streak)", "🔥", .orange, streak >= 1),
+            ("24", "Streak Starter", "Start a streak (1 day)", "🔥", .orange, streak >= 1),
+            ("24b", "On Fire", "3 Day Streak", "🚀", .red, streak >= 3), // NEW
             ("25", "Double Digit Day", "10 laughs in one day", "🚀", .red, laughs.filter { calendar.isDateInToday($0.timestamp) }.count >= 10),
             ("26", "Note Taker", "Add notes to 5 laughs", "📝", .yellow, laughs.filter { ($0.note ?? "").count > 0 }.count >= 5),
             ("27", "Detail Orientated", "Add notes to 20 laughs", "✍️", .yellow, laughs.filter { ($0.note ?? "").count > 0 }.count >= 20),
