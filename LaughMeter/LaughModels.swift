@@ -479,9 +479,12 @@ class LaughController: ObservableObject {
         people.move(fromOffsets: source, toOffset: destination)
         savePeople()
     }
-    private func savePeople() {
+    
+    // *** FIX: REMOVED PRIVATE ACCESS CONTROL ***
+    func savePeople() {
         UserDefaults.standard.set(people, forKey: "SavedPeople")
     }
+    
     func generateCSV() -> String {
         let descriptor = FetchDescriptor<LaughEntry>(sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
         guard let laughs = try? modelContext.fetch(descriptor) else { return "Error" }

@@ -453,8 +453,17 @@ struct SettingsView: View {
                 
                 // SECTION 2: PEOPLE
                 Section(header: Text("Manage People")) {
-                    ForEach(controller.people, id: \.self) { person in
-                        Label(person, systemImage: "person.fill")
+                    ForEach(controller.people.indices, id: \.self) { index in
+                        HStack {
+                            Image(systemName: "person.fill").foregroundColor(.gray)
+                            TextField("Name", text: Binding(
+                                get: { controller.people[index] },
+                                set: { newValue in
+                                    controller.people[index] = newValue
+                                    controller.savePeople()
+                                }
+                            ))
+                        }
                     }
                     .onDelete { idx in controller.deletePerson(at: idx) }
                     .onMove { src, dst in controller.movePerson(from: src, to: dst) }
@@ -477,7 +486,7 @@ struct SettingsView: View {
                     HStack {
                         Text("Version")
                         Spacer()
-                        Text("1.4.0")
+                        Text("1.0.0")
                             .foregroundColor(.secondary)
                     }
                     Text("LaughMeter: Daily quotes, better stats, and pure joy.")
@@ -486,7 +495,6 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
-            .toolbar { EditButton() }
             .alert("Add New Person", isPresented: $isAddingPerson) {
                 TextField("Name", text: $newPersonName)
                 Button("Cancel", role: .cancel) { newPersonName = "" }
